@@ -69,10 +69,10 @@ parseQuoted = do
     x <- parseExpr
     return $ List [Atom "quote" , x]
 
-readExpr :: String -> LispVal
+readExpr :: String -> ThrowsError LispVal
 readExpr input = case parse parseExpr "lisp" input of
-	Left err -> String $ "No match: " ++ show err
-	Right val -> val
+	Left err -> throwError $ Parser err
+	Right val -> return val
 
 
 showVal :: LispVal -> String
@@ -98,18 +98,38 @@ showError (NumArgs expected found) = "Expected " ++ show func
 showError (TypeMismatch expected found) = "Invalid type: expected " ++ expected
 showError (Parser parseErr) = "Parse error at " ++ show parseErr
 
-instance SHow LispError where
+instance Show LispError where
   show = showError
+
+instance Error LispError where
+  noMsg = Default "An error has occurred"
+  strMsg = Default
+
+type ThrowsError = Either LispError
+trapError action catchError action (return . show)
+
+extraceValue :: ThrowsError a -> a
+extraceValue (Right val) = val
 
 eval :: LispVal -> LispVal
 eval val@(String _) = val
 eval val@(Number _) = val
 eval val@(Bool _) = val
 eval (List [Atom "quote" , val]) = val
-eval (List (Atom func : args)) = apply func $ map eval args
-
-apply ::  String -> [LispVal] -> LispVal
-apply func args = maybe (Bool False) ($ args) $ lookup func primitives
+eval (List (Atom func : args)) = mapM eval args >>= apply func
+eval badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
+--
+--
+--
+--
+--  To understanding
+--
+--
+--
+--
+--
+apply ::  String -> [LispVal] ->ThrowsError LispVal
+apply func args = maybe (throwError $ NotFunction "Unrecognized primitive function args" func) ($ args) (lookup func primitives)
 
 primitives :: [(String , [LispVal] -> LispVal)]
 primitives = [("+" , numericBinop (+)),
