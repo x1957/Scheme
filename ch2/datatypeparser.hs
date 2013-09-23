@@ -13,6 +13,8 @@ data LispVal = Atom String
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=?>@^_~#"
 
+spaces :: Parser ()
+spaces = skipMany1 space
 parseString :: Parser LispVal
 parseString = do char '"'
                  x <- many (noneOf "\"")
@@ -32,11 +34,29 @@ parseNumber :: Parser LispVal
 parseNumber = liftM (Number . read)  $ many1 digit
 
 parseExpr :: Parser LispVal
-parseExpr = parseAtom <|> parseString
+parseExpr = parseAtom 
+        <|> parseString
+        <|> parseNumber
+        <|> parseQuoted
+        <|> do char '('
+               x <- (try parseList) <|> parseDottedLits
+               char ')'
+               return x
 
---parseList :: Parser LispVal
---parseList = liftM List (sepBy parseExpr spaces)
+parseList :: Parser LispVal
+parseList = liftM List $ sepBy parseExpr spaces
 
+parseDottedLits :: Parser LispVal
+parseDottedLits = do
+    head <- endBy parseExpr spaces
+    tail <- char '.' >> spaces >> parseExpr
+    return $ DottedList head tail
+
+parseQuoted :: Parser LispVal
+parseQuoted = do
+    char '\''
+    x <- parseExpr
+    return $ List [Atom "quote" , x]
 
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
