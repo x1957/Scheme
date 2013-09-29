@@ -7,6 +7,7 @@ import Text.ParserCombinators.Parsec hiding (spaces)
 import Control.Monad
 import Control.Monad.Error
 import System.IO hiding(try)
+import Data.IORef
 
 data LispVal = Atom String
              | List [LispVal]
@@ -266,6 +267,20 @@ until_ pred prompt action = do
 
 runRepl :: IO ()
 runRepl = until_ (== "quit") (readPrompt "Lisp>>> ") evalAndPrint
+
+type Env = IORef [(String , IORef LispVal)]
+
+nullEnv :: IO Env
+nullEnv = newIORef []
+
+type IOThrowsError = ErrorT LispError IO
+
+liftThrows :: ThrowsError a -> IOThrowsError a
+liftThrows (Left err) = throwError err
+liftThrows (Right val) = return val
+
+runIOThrows :: IOThrowsError String -> IO String
+runIOThrows action = runErrorT (trapError action) >>= return . extractValue
 
 main :: IO ()
 main = do
